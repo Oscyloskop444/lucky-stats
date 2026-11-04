@@ -1,0 +1,9 @@
+# private — never upload these
+config.json
+roster.csv
+
+# generated on every run
+dashboard.html
+site/
+debug/
+__pycache__/

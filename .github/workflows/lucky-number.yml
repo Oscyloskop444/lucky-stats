@@ -1,0 +1,110 @@
+name: Lucky number
+
+on:
+  schedule:
+    # GitHub uses UTC. 05:47 UTC = 06:47 in Warsaw in winter, 07:47 in summer.
+    # The second run is a safety net: if the first one already got the number,
+    # it only rebuilds the page and doesn't log in again.
+    - cron: "47 5 * * 1-5"
+    - cron: "13 9 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      backfill_since:
+        description: "Optional: also try to download past days since this date (YYYY-MM-DD)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write   # save lucky_numbers.csv back to the repository
+  pages: write      # publish the dashboard
+  id-token: write   # required by GitHub Pages
+
+concurrency:
+  group: lucky-number
+  cancel-in-progress: false
+
+env:
+  TZ: Europe/Warsaw
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Write class list from secret
+        env:
+          ROSTER_CSV: ${{ secrets.ROSTER_CSV }}
+        run: |
+          if [ -n "$ROSTER_CSV" ]; then
+            printf '%s\n' "$ROSTER_CSV" > roster.csv
+            echo "Class list loaded."
+          else
+            echo "No ROSTER_CSV secret: the dashboard will show numbers instead of names."
+          fi
+
+      - name: Get the lucky number
+        env:
+          EDUVULCAN_LOGIN: ${{ secrets.EDUVULCAN_LOGIN }}
+          EDUVULCAN_PASSWORD: ${{ secrets.EDUVULCAN_PASSWORD }}
+          EDUVULCAN_STUDENT: ${{ secrets.EDUVULCAN_STUDENT }}
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+          BACKFILL_SINCE: ${{ inputs.backfill_since }}
+        run: |
+          if [ -n "$BACKFILL_SINCE" ]; then
+            python lucky.py backfill --since "$BACKFILL_SINCE"
+          else
+            python lucky.py daily --skip-if-done
+          fi
+
+      - name: Save history to the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          if [ -f lucky_numbers.csv ]; then git add lucky_numbers.csv; fi
+          if git diff --cached --quiet; then
+            echo "Nothing new to save."
+          else
+            git commit -m "Lucky number $(date +%F)"
+            git pull --rebase
+            git push
+          fi
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v5
+
+      # Screenshots can show grades, so they are only kept when the repository is private
+      # (artifacts of public repositories can be downloaded by anyone).
+      - name: Check repository visibility
+        id: vis
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "private=$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" >> "$GITHUB_OUTPUT"
+
+      - name: Keep debug screenshots (private repositories only)
+        if: failure() && steps.vis.outputs.private == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug
+          path: debug/
+          retention-days: 3
+          if-no-files-found: ignore

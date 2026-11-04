@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Lucky Number Stats</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f4f3f0; --surface-1: #fcfcfb; --border: #e3e2dd;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --accent: #2a78d6; --error: #c03a2b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --accent: #3987e5; --error: #ef6f5e;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --accent: #3987e5; --error: #ef6f5e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+    background: var(--surface-0); color: var(--text-primary);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  form { width: 100%; max-width: 360px; background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  p { margin: 0 0 18px; color: var(--text-secondary); font-size: 14px; }
+  input[type=password] { width: 100%; padding: 10px 12px; font: inherit; color: inherit; background: transparent;
+    border: 1px solid var(--border); border-radius: 8px; }
+  input[type=password]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  label.rem { display: flex; gap: 8px; align-items: center; margin: 12px 0 16px; font-size: 14px; color: var(--text-secondary); }
+  button { width: 100%; padding: 10px; font: inherit; font-weight: 600; color: #fff; background: var(--accent);
+    border: 0; border-radius: 8px; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: progress; }
+  #err { min-height: 20px; margin-top: 10px; color: var(--error); font-size: 14px; }
+</style>
+</head>
+<body>
+<form id="f" hidden>
+  <h1>Lucky Number Stats</h1>
+  <p>Enter the dashboard password.</p>
+  <input type="password" id="pw" autocomplete="current-password" aria-label="Password" required>
+  <label class="rem"><input type="checkbox" id="rem"> Remember on this device</label>
+  <button id="go">Open</button>
+  <div id="err" role="alert"></div>
+</form>
+<script>
+(() => {   // everything stays inside this function, so the dashboard's own script can't clash with it
+  const BLOB = /*__BLOB__*/null;
+  const STORE = "lucky-stats-key:" + BLOB.salt;
+  const bytes = b64 => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const toB64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const store = {
+    get() { try { return localStorage.getItem(STORE); } catch (e) { return null; } },
+    set(v) { try { localStorage.setItem(STORE, v); } catch (e) {} },
+    drop() { try { localStorage.removeItem(STORE); } catch (e) {} },
+  };
+
+  async function deriveKey(password) {
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+    return crypto.subtle.deriveKey({ name: "PBKDF2", salt: bytes(BLOB.salt), iterations: BLOB.iter, hash: "SHA-256" },
+      base, { name: "AES-GCM", length: 256 }, true, ["decrypt"]);
+  }
+  async function decrypt(key) {
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes(BLOB.iv) }, key, bytes(BLOB.ct));
+    return new TextDecoder().decode(plain);
+  }
+  function show(html) { document.open(); document.write(html); document.close(); }
+
+  const f = document.getElementById("f"), pw = document.getElementById("pw"),
+        rem = document.getElementById("rem"), go = document.getElementById("go"),
+        err = document.getElementById("err");
+
+  f.addEventListener("submit", async e => {
+    e.preventDefault();
+    err.textContent = ""; go.disabled = true; go.textContent = "Opening…";
+    let html, key;
+    try {
+      key = await deriveKey(pw.value);
+      html = await decrypt(key);
+    } catch (ex) {
+      err.textContent = "Wrong password.";
+      go.disabled = false; go.textContent = "Open"; pw.select();
+      return;
+    }
+    if (rem.checked) store.set(toB64(await crypto.subtle.exportKey("raw", key)));
+    show(html);
+  });
+
+  (async () => {
+    if (!window.crypto || !crypto.subtle) {
+      f.hidden = false; go.disabled = true;
+      err.textContent = "This browser can't open the page. Try a newer browser.";
+      return;
+    }
+    const saved = store.get();
+    if (saved) {
+      try {
+        const key = await crypto.subtle.importKey("raw", bytes(saved), "AES-GCM", false, ["decrypt"]);
+        show(await decrypt(key));
+        return;
+      } catch (e) { store.drop(); }   // password changed since → ask again
+    }
+    f.hidden = false; pw.focus();
+  })();
+})();
+</script>
+</body>
+</html>

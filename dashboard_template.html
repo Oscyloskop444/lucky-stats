@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lucky Number Stats</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f4f3f0; --surface-1: #fcfcfb; --border: #e3e2dd; --grid: #ecebe7;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
+    --series-1: #2a78d6; --series-1-soft: #cde2fb; --accent-2: #eb6834;
+    --tip-bg: #0b0b0b; --tip-fg: #fcfcfb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e88;
+      --series-1: #3987e5; --series-1-soft: #184f95; --accent-2: #d95926;
+      --tip-bg: #f0efec; --tip-fg: #1a1a19;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e88;
+    --series-1: #3987e5; --series-1-soft: #184f95; --accent-2: #d95926;
+    --tip-bg: #f0efec; --tip-fg: #1a1a19;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface-0); color: var(--text-primary);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 28px 16px 48px; }
+  header h1 { margin: 0; font-size: 26px; letter-spacing: -0.01em; }
+  header p { margin: 4px 0 0; color: var(--text-secondary); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 22px 0; }
+  .tile, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; }
+  .tile { padding: 14px 16px; }
+  .tile .k { font-size: 13px; color: var(--text-secondary); }
+  .tile .v { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .tile .s { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card { padding: 18px 18px 14px; margin-bottom: 16px; }
+  .card h2 { margin: 0; font-size: 17px; }
+  .card .sub { margin: 2px 0 12px; color: var(--text-secondary); font-size: 13px; }
+  .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text-secondary); padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface-1); }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+  ol.rank { list-style: none; margin: 0; padding: 0; }
+  ol.rank li { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--grid); }
+  ol.rank li:first-child { border-top: 0; }
+  .pos { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .num { color: var(--text-muted); font-size: 13px; }
+  .cnt { font-weight: 600; font-variant-numeric: tabular-nums; }
+  svg text { fill: var(--text-secondary); font-size: 12px; }
+  .chart-wrap { overflow-x: auto; }
+  .bar { fill: var(--series-1); }
+  .bar.zero { fill: var(--text-muted); }
+  .hit { fill: transparent; cursor: default; }
+  .hit:hover + .bar, .bar.hl { fill: var(--accent-2); }
+  .gridline { stroke: var(--grid); }
+  .expected { stroke: var(--text-primary); stroke-dasharray: 4 4; stroke-width: 1.5; }
+  .dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; }
+  #tip { position: fixed; pointer-events: none; background: var(--tip-bg); color: var(--tip-fg); padding: 7px 10px; border-radius: 8px; font-size: 13px; max-width: 260px; opacity: 0; transition: opacity .1s; z-index: 10; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--grid); }
+  th { color: var(--text-secondary); font-weight: 500; cursor: pointer; user-select: none; }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  details summary { cursor: pointer; color: var(--text-secondary); }
+  .empty { padding: 40px; text-align: center; color: var(--text-secondary); }
+  footer { color: var(--text-muted); font-size: 12px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Lucky Number Stats</h1>
+    <p id="range"></p>
+  </header>
+  <div id="app"></div>
+  <footer id="foot"></footer>
+</main>
+<div id="tip" role="tooltip"></div>
+<script>
+const DATA = /*__DATA__*/null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtDate = iso => new Date(iso + "T12:00:00").toLocaleDateString(undefined, {day:"numeric", month:"short", year:"numeric"});
+const NS = "http://www.w3.org/2000/svg";
+const tip = $("#tip");
+function showTip(e, html) { tip.innerHTML = html; tip.style.opacity = 1; moveTip(e); }
+function moveTip(e) { const w = tip.offsetWidth; tip.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + "px"; tip.style.top = (e.clientY + 14) + "px"; }
+function hideTip() { tip.style.opacity = 0; }
+
+function render() {
+  const app = $("#app");
+  const draws = DATA.draws, people = DATA.people;
+  $("#foot").textContent = "Generated " + DATA.generated;
+  if (!draws.length) {
+    app.innerHTML = '<div class="card empty">No lucky numbers saved yet. Run <code>python lucky.py daily</code> or <code>backfill</code>.</div>';
+    return;
+  }
+  $("#range").textContent = `${draws.length} lucky numbers · ${fmtDate(draws[0].date)} – ${fmtDate(draws[draws.length-1].date)}`;
+  const inClass = DATA.hasRoster ? people.filter(p => p.inRoster) : people;
+  const outside = DATA.hasRoster ? people.filter(p => !p.inRoster && p.count) : [];
+  const classDraws = inClass.reduce((s, p) => s + p.count, 0);
+  const expected = classDraws / Math.max(inClass.length, 1);
+  const byCount = [...inClass].sort((a, b) => b.count - a.count || a.number - b.number);
+  const top = byCount[0], maxC = top.count;
+  const leaders = byCount.filter(p => p.count === maxC);
+  const never = inClass.filter(p => p.count === 0);
+  const last = draws[draws.length - 1];
+  const lastP = people.find(p => p.number === last.number);
+
+  app.innerHTML = `
+    <section class="tiles">
+      <div class="tile"><div class="k">Luckiest</div><div class="v">${maxC}×</div><div class="s" title="${esc(leaders.map(p=>p.name).join(", "))}">${esc(leaders.map(p=>p.name).join(", "))}</div></div>
+      <div class="tile"><div class="k">Never drawn</div><div class="v">${never.length}</div><div class="s">of ${inClass.length} ${DATA.hasRoster ? "students" : "numbers"}</div></div>
+      <div class="tile"><div class="k">Fair share</div><div class="v">${expected.toFixed(1)}</div><div class="s">draws each if perfectly even</div></div>
+      <div class="tile"><div class="k">Latest</div><div class="v">${last.number}</div><div class="s">${esc(lastP ? lastP.name : "")} · ${fmtDate(last.date)}</div></div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <div><h2>Lucky numbers per ${DATA.hasRoster ? "student" : "number"}</h2>
+        <p class="sub">Dashed line = fair share (${expected.toFixed(1)}). Hover a bar for the dates.</p></div>
+        <div class="seg" role="group" aria-label="Sort">
+          <button data-sort="count" aria-pressed="true">Most first</button>
+          <button data-sort="number" aria-pressed="false">By number</button>
+        </div>
+      </div>
+      <div class="chart-wrap" id="bars"></div>
+    </section>
+
+    <section class="split">
+      <div class="card"><h2>Most lucky</h2><p class="sub">Top 5</p><ol class="rank" id="topList"></ol></div>
+      <div class="card"><h2>Least lucky</h2><p class="sub">Bottom 5${never.length ? ` · ${never.length} never drawn` : ""}</p><ol class="rank" id="bottomList"></ol></div>
+    </section>
+
+    <section class="card">
+      <h2>Every draw over time</h2>
+      <p class="sub">Each dot is one school day's lucky number.</p>
+      <div class="chart-wrap" id="timeline"></div>
+    </section>
+
+    ${outside.length ? `<section class="card"><h2>Numbers nobody in the class has</h2>
+      <p class="sub">${outside.map(p => `${p.number} (${p.count}×)`).join(", ")} — days when nobody got the bonus.</p></section>` : ""}
+
+    <section class="card">
+      <details><summary>Table view</summary>
+        <table id="tbl"><thead><tr><th data-k="number" class="r">No.</th><th data-k="name">Name</th><th data-k="count" class="r">Times</th><th data-k="last">Last drawn</th></tr></thead><tbody></tbody></table>
+      </details>
+    </section>`;
+
+  const rankRow = (p, i) => `<li><span class="pos">${i+1}.</span><span>${esc(p.name)} <span class="num">#${p.number}</span></span><span class="cnt">${p.count}×</span></li>`;
+  $("#topList").innerHTML = byCount.slice(0, 5).map(rankRow).join("");
+  const bottom = [...inClass].sort((a, b) => a.count - b.count || a.number - b.number).slice(0, 5);
+  $("#bottomList").innerHTML = bottom.map(rankRow).join("");
+
+  let sortKey = "count";
+  document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+    sortKey = b.dataset.sort;
+    document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    drawBars();
+  });
+  function drawBars() {
+    const list = sortKey === "count" ? byCount : [...inClass].sort((a, b) => a.number - b.number);
+    const rowH = 26, labelW = 170, padR = 40, top = 22;
+    const W = Math.max($("#bars").clientWidth, 420), H = top + list.length * rowH + 8;
+    const x = v => labelW + (v / Math.max(maxC, expected, 1)) * (W - labelW - padR);
+    let s = `<svg width="${W}" height="${H}" role="img" aria-label="Bar chart of lucky number counts">`;
+    const step = maxC > 10 ? Math.ceil(maxC / 5) : 1;
+    for (let v = 0; v <= Math.max(maxC, Math.ceil(expected)); v += step)
+      s += `<line class="gridline" x1="${x(v)}" x2="${x(v)}" y1="${top-4}" y2="${H-8}"/><text x="${x(v)}" y="${top-8}" text-anchor="middle">${v}</text>`;
+    list.forEach((p, i) => {
+      const y = top + i * rowH, bw = Math.max(x(p.count) - labelW, p.count ? 4 : 0);
+      const name = p.name.length > 22 ? p.name.slice(0, 21) + "…" : p.name;
+      s += `<text x="${labelW - 10}" y="${y + rowH/2 + 4}" text-anchor="end">${esc(name)}</text>`;
+      s += `<rect class="hit" data-i="${i}" x="0" y="${y}" width="${W}" height="${rowH}"/>`;
+      s += p.count ? `<rect class="bar" x="${labelW}" y="${y + 5}" width="${bw}" height="${rowH - 10}" rx="4"/>`
+                   : `<rect class="bar zero" x="${labelW}" y="${y + rowH/2 - 1}" width="6" height="2" rx="1"/>`;
+      s += `<text x="${labelW + bw + 6}" y="${y + rowH/2 + 4}">${p.count}</text>`;
+    });
+    s += `<line class="expected" x1="${x(expected)}" x2="${x(expected)}" y1="${top-4}" y2="${H-8}"/></svg>`;
+    $("#bars").innerHTML = s;
+    $("#bars").querySelectorAll(".hit").forEach(r => {
+      const p = list[+r.dataset.i];
+      const html = `<b>${esc(p.name)}</b> · #${p.number}<br>${p.count ? p.count + "× — " + p.dates.map(fmtDate).join(", ") : "Never drawn yet"}`;
+      r.onmouseenter = e => showTip(e, html); r.onmousemove = moveTip; r.onmouseleave = hideTip;
+    });
+  }
+  drawBars();
+  addEventListener("resize", () => { drawBars(); drawTimeline(); });
+
+  function drawTimeline() {
+    const W = Math.max($("#timeline").clientWidth, 420), H = 260, L = 36, R = 12, T = 12, B = 28;
+    const t0 = new Date(draws[0].date).getTime(), t1 = new Date(last.date).getTime();
+    const maxN = Math.max(...draws.map(d => d.number), ...inClass.map(p => p.number));
+    const x = iso => L + (t1 === t0 ? 0.5 : (new Date(iso).getTime() - t0) / (t1 - t0)) * (W - L - R);
+    const y = n => T + (1 - (n - 1) / Math.max(maxN - 1, 1)) * (H - T - B);
+    let s = `<svg width="${W}" height="${H}" role="img" aria-label="Lucky numbers over time">`;
+    const ystep = maxN > 20 ? 5 : 2;
+    for (let n = ystep; n <= maxN; n += ystep)
+      s += `<line class="gridline" x1="${L}" x2="${W-R}" y1="${y(n)}" y2="${y(n)}"/><text x="${L-6}" y="${y(n)+4}" text-anchor="end">${n}</text>`;
+    const months = new Set(draws.map(d => d.date.slice(0, 7)));
+    [...months].forEach(m => { const xm = x(m + "-01"); if (xm >= L && xm <= W - R)
+      s += `<text x="${xm}" y="${H-8}" text-anchor="middle">${new Date(m + "-15").toLocaleDateString(undefined,{month:"short"})}</text>`; });
+    draws.forEach((d, i) => s += `<circle class="dot" data-i="${i}" cx="${x(d.date)}" cy="${y(d.number)}" r="5"/>`);
+    s += "</svg>";
+    $("#timeline").innerHTML = s;
+    $("#timeline").querySelectorAll(".dot").forEach(c => {
+      const d = draws[+c.dataset.i], p = people.find(q => q.number === d.number);
+      c.onmouseenter = e => showTip(e, `<b>${d.number}</b> · ${esc(p ? p.name : "")}<br>${fmtDate(d.date)}`);
+      c.onmousemove = moveTip; c.onmouseleave = hideTip;
+    });
+  }
+  drawTimeline();
+
+  const rows = people.map(p => ({...p, last: p.dates[p.dates.length - 1] || ""}));
+  let tk = "count", dir = -1;
+  function drawTable() {
+    rows.sort((a, b) => (a[tk] > b[tk] ? 1 : a[tk] < b[tk] ? -1 : 0) * dir || a.number - b.number);
+    $("#tbl tbody").innerHTML = rows.map(p => `<tr><td class="r">${p.number}</td><td>${esc(p.name)}</td><td class="r">${p.count}</td><td>${p.last ? fmtDate(p.last) : "—"}</td></tr>`).join("");
+  }
+  document.querySelectorAll("#tbl th").forEach(th => th.onclick = () => { dir = tk === th.dataset.k ? -dir : (th.dataset.k === "name" ? 1 : -1); tk = th.dataset.k; drawTable(); });
+  drawTable();
+}
+render();
+</script>
+</body>
+</html>
